@@ -1,0 +1,17 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
+  background: #0a0a0a;
+}
+
+#root {
+  width: 100vw;
+  height: 100vh;
+}

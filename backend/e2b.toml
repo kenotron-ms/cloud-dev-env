@@ -1,0 +1,5 @@
+# E2B Template Configuration
+# This defines the custom sandbox template with blobfuse2 for Azure Blob Storage
+
+template_id = "cloud-dev-blobfuse"
+dockerfile = ".e2b/Dockerfile"
