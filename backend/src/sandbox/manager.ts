@@ -66,6 +66,7 @@ export class SandboxManager {
         ? `echo "Azure Blob Storage mounted at ${AzureBlobConfigManager.getMountPoint()}"\n`
         : 'echo "Note: Cloud storage disabled - files will not persist"\n';
 
+      // Write .bashrc with environment setup
       await this.sandbox.files.write(
         '/home/user/.bashrc',
         'export ANTHROPIC_API_KEY=' + config.anthropicApiKey + '\n' +
@@ -76,6 +77,17 @@ export class SandboxManager {
         'echo "Claude Code is available - try: claude --help"\n' +
         storageMessage +
         'echo ""\n'
+      );
+
+      // Pre-configure Claude Code
+      await this.sandbox.commands.run('mkdir -p /home/user/.config/claude');
+      await this.sandbox.files.write(
+        '/home/user/.config/claude/config.json',
+        JSON.stringify({
+          api_key: config.anthropicApiKey,
+          default_model: 'claude-sonnet-4-20250514',
+          auto_update_check: false
+        }, null, 2)
       );
 
       this.ptyHandle = await this.sandbox.pty.create({
