@@ -2,34 +2,107 @@
 
 **Purpose**: Browser-based cloud development environment with persistent storage
 
-A full-featured development environment accessible through a web browser, with all files stored in Azure Blob Storage for persistence across sessions.
+A full-featured development environment accessible through a web browser, with all files stored in **Cloudflare R2** for persistence across sessions.
 
 ## Architecture
 
 ```
-┌─────────────┐     WebSocket      ┌─────────────┐     PTY      ┌─────────────┐     FUSE      ┌─────────────┐
-│   Browser   │ ←─────────────────→ │   Backend   │ ←───────────→ │ e2b Sandbox │ ←───────────→ │Azure Blob   │
-│  (xterm.js) │   Terminal I/O      │  (Node.js)  │   Terminal    │ (PTY+bash)  │   File Ops    │Storage      │
-└─────────────┘                     └─────────────┘               └─────────────┘               └─────────────┘
+┌─────────────┐     WebSocket      ┌─────────────┐     PTY      ┌─────────────┐    s3fs/FUSE   ┌─────────────┐
+│   Browser   │ ←─────────────────→ │   Backend   │ ←───────────→ │ E2B Sandbox │ ←──────────────→ │Cloudflare R2│
+│  (xterm.js) │   Terminal I/O      │  (Node.js)  │   Terminal    │ (PTY+bash)  │   File Ops      │   Storage   │
+└─────────────┘                     └─────────────┘               └─────────────┘                 └─────────────┘
 ```
 
 ## Features
 
 - 🖥️ **Browser-based terminal**: xterm.js with full-screen support and auto-resize
-- 🔒 **Isolated sandboxes**: Powered by e2b.dev for secure execution
-- ☁️ **Cloud persistence**: Azure Blob Storage via FUSE mount
-- 🔄 **Auto-reconnect**: Exponential backoff on disconnections
+- 🔒 **Isolated sandboxes**: Powered by [E2B](https://e2b.dev) for secure execution
+- ☁️ **Cloud persistence**: Cloudflare R2 (10GB free) via s3fs FUSE mount
+- 🔄 **Sandbox reuse**: Connect to existing sandboxes to avoid rate limits
+- ⚡ **High performance**: 4 vCPU, 4GB RAM sandboxes
 - 📦 **Modular architecture**: Clear separation of concerns
-- 🚀 **Fast setup**: Development (Azurite) and production (Azure) modes
 - 🎨 **Classic terminal theme**: Dark background with green text
 - 🔗 **Clickable links**: Web links automatically detected
+
+## Quick Start
+
+### Prerequisites
+
+- Node.js 18+ and pnpm
+- [E2B API key](https://e2b.dev/dashboard)
+- [Cloudflare R2 account](https://dash.cloudflare.com) (free tier: 10GB storage)
+
+### 1. Create Cloudflare R2 Bucket
+
+1. Go to [Cloudflare Dashboard](https://dash.cloudflare.com) → **R2**
+2. Click **Create bucket**
+3. Name: `cloud-dev-workspace`
+4. Click **Create**
+
+### 2. Generate R2 API Tokens
+
+1. R2 → **Manage R2 API Tokens**
+2. Click **Create API token**
+3. Permissions: **Admin Read & Write**
+4. Copy:
+   - Access Key ID
+   - Secret Access Key
+   - R2 endpoint URL
+
+### 3. Build E2B Template
+
+```bash
+cd backend/.e2b
+e2b template build
+# This creates a custom template with s3fs, 4 vCPU, 4GB RAM
+```
+
+### 4. Setup Frontend
+
+```bash
+pnpm install
+```
+
+### 5. Setup Backend
+
+```bash
+cd backend
+cp .env.example .env
+# Edit .env:
+#   E2B_API_KEY=your_e2b_key
+#   CLOUD_STORAGE_ENABLED=true
+#   CLOUD_STORAGE_TYPE=r2
+#   R2_ACCESS_KEY_ID=your_r2_access_key
+#   R2_SECRET_ACCESS_KEY=your_r2_secret
+#   R2_ENDPOINT=https://your-account.r2.cloudflarestorage.com
+#   R2_BUCKET=cloud-dev-workspace
+
+pnpm install
+```
+
+### 6. Run Development Servers
+
+```bash
+# From project root:
+pnpm dev
+
+# This starts:
+# - Frontend: http://localhost:5173 (or 5174 if 5173 is busy)
+# - Backend: http://localhost:3000
+```
+
+### 7. Open in Browser
+
+1. Navigate to http://localhost:5173
+2. Click **"Start Session"**
+3. Wait for terminal to connect
+4. Start coding! Your files persist in Cloudflare R2
 
 ## Project Structure
 
 ```
 cloud-dev-env/
 ├── README.md                      # This file
-├── TESTING-GUIDE.md              # Comprehensive testing guide
 ├── src/                          # Frontend source
 │   ├── App.tsx                   # Main application
 │   ├── components/
@@ -37,159 +110,16 @@ cloud-dev-env/
 │   └── lib/
 │       └── websocket.ts          # WebSocket connection manager
 └── backend/                      # Backend source
-    ├── README.md                 # Backend documentation
-    ├── IMPLEMENTATION.md         # Implementation details
     ├── .e2b/
-    │   └── Dockerfile            # E2B sandbox template
+    │   ├── Dockerfile            # E2B sandbox template (Ubuntu + s3fs)
+    │   └── e2b.toml              # Template config (4 vCPU, 4GB RAM)
     └── src/
         ├── index.ts              # Server entry point
         ├── config/env.ts         # Environment configuration
-        ├── sandbox/manager.ts    # E2B sandbox lifecycle
-        ├── storage/azure-blob.ts # Azure Blob config generator
+        ├── sandbox/manager.ts    # E2B sandbox lifecycle + R2 mounting
+        ├── storage/r2.ts         # R2 storage manager
         └── websocket/handler.ts  # WebSocket connection handler
 ```
-
-## Quick Start
-
-### Prerequisites
-
-- Node.js 18+ and pnpm
-- E2B API key ([get one here](https://e2b.dev/dashboard))
-- Azure Storage account OR Azurite for local development
-- Azure CLI (for CLI authentication mode - recommended)
-
-### Local Development Setup
-
-#### Option A: Azure CLI Authentication (Recommended)
-
-1. **Install and authenticate with Azure CLI**:
-```bash
-# Install Azure CLI (if not already installed)
-# macOS: brew install azure-cli
-# Windows: Download from https://aka.ms/installazurecliwindows
-# Linux: See https://docs.microsoft.com/cli/azure/install-azure-cli-linux
-
-# Login to Azure
-az login
-
-# Verify authentication
-az account show
-```
-
-2. **Setup Frontend**:
-```bash
-pnpm install
-pnpm dev
-# Frontend runs on http://localhost:5174
-```
-
-3. **Setup Backend**:
-```bash
-cd backend
-cp .env.example .env
-# Edit .env with your settings:
-#   E2B_API_KEY=your_key
-#   AZURE_STORAGE_ENABLED=true
-#   AZURE_AUTH_MODE=cli  # Uses Azure CLI credentials (no key needed)
-#   AZURE_STORAGE_ACCOUNT=your_storage_account
-pnpm install
-pnpm dev
-# Backend runs on http://localhost:3000
-```
-
-4. **Create Blob Container**:
-```bash
-az storage container create \
-  --name cloud-dev-workspace \
-  --account-name your_storage_account
-```
-
-#### Option B: Key-Based Authentication (Fallback)
-
-Use this for Azurite (local development emulator) or when Azure CLI is not available:
-
-1. **Start Azurite** (Azure Storage emulator):
-```bash
-npm install -g azurite
-azurite --silent --location /tmp/azurite
-```
-
-2. **Setup Frontend**: (same as Option A)
-
-3. **Setup Backend**:
-```bash
-cd backend
-cp .env.example .env
-# Edit .env with your settings:
-#   E2B_API_KEY=your_key
-#   AZURE_STORAGE_ENABLED=true
-#   AZURE_AUTH_MODE=key  # Uses storage account key
-#   AZURE_STORAGE_ACCOUNT=devstorageaccount1
-#   AZURE_STORAGE_KEY=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==
-pnpm install
-pnpm dev
-```
-
-4. **Create Blob Container**:
-```bash
-az storage container create \
-  --name cloud-dev-workspace \
-  --connection-string "DefaultEndpointsProtocol=http;AccountName=devstorageaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://127.0.0.1:10000/devstorageaccount1;"
-```
-
-5. **Open Browser**:
-   - Navigate to http://localhost:5174
-   - Click "Start Session"
-   - Wait for terminal to connect
-   - Start coding! Files are persisted in Azure Blob Storage
-
-## Testing
-
-See [TESTING-GUIDE.md](./TESTING-GUIDE.md) for comprehensive testing instructions, including:
-- Frontend connection tests
-- E2B sandbox creation verification
-- Azure Blob Storage mount validation
-- File persistence tests
-- Performance benchmarks
-- Common troubleshooting
-
-Quick smoke test:
-```bash
-# 1. Start services (frontend + backend + Azurite)
-# 2. Open http://localhost:5174
-# 3. Click "Start Session"
-# 4. In terminal, run:
-cd /workspace/files
-echo "Hello Cloud!" > test.txt
-cat test.txt
-# Should see: Hello Cloud!
-
-# 5. Verify in Azure:
-az storage blob list \
-  --container-name cloud-dev-workspace \
-  --connection-string "..." \
-  --output table
-# Should see test.txt
-```
-
-## Implementation Status
-
-All phases complete:
-- ✅ **Phase 1**: Frontend with xterm.js terminal
-- ✅ **Phase 2**: Backend with e2b.dev sandbox integration
-- ✅ **Phase 3**: FUSE + Azure Blob Storage mounting
-- ✅ **Testing**: Comprehensive testing guide
-
-**What works:**
-- ✅ Browser-based terminal with full xterm.js features
-- ✅ WebSocket connection with auto-reconnect
-- ✅ E2B sandbox creation and management
-- ✅ PTY-based interactive terminal
-- ✅ Azure Blob Storage mounting via FUSE
-- ✅ File persistence across sandbox restarts
-- ✅ Graceful cleanup on disconnect/timeout
-- ✅ Development mode with Azurite emulator
-- ✅ Production mode with real Azure Storage
 
 ## Technology Stack
 
@@ -206,83 +136,69 @@ All phases complete:
 - e2b SDK - Sandbox management
 
 **Infrastructure:**
-- e2b.dev - Sandboxed code execution
-- Azure Blob Storage - Cloud file persistence
-- blobfuse2 - FUSE driver for Azure Blob
-- Azurite - Local Azure emulator
+- [E2B](https://e2b.dev) - Cloud sandboxed execution (4 vCPU, 4GB RAM)
+- [Cloudflare R2](https://developers.cloudflare.com/r2/) - S3-compatible object storage (10GB free)
+- s3fs - FUSE driver for S3-compatible storage
+
+## Why Cloudflare R2?
+
+- ✅ **10GB free storage** (forever)
+- ✅ **No egress fees** (unlike AWS S3)
+- ✅ **S3-compatible API** (works with s3fs)
+- ✅ **Simple authentication** (access key + secret)
+- ✅ **No tenant policy restrictions** (unlike Azure)
 
 ## Configuration
 
-### Frontend Environment Variables
+### Sandbox Reuse (Recommended)
 
-Create `.env`:
+To avoid E2B rate limits, reuse existing sandboxes:
+
 ```bash
-VITE_API_URL=http://localhost:3000  # Backend WebSocket URL
+# When backend creates a sandbox, it logs:
+# [SandboxManager] To reuse this sandbox, set E2B_SANDBOX_ID=ixxx...
+
+# Add to backend/.env:
+E2B_SANDBOX_ID=your_sandbox_id
 ```
 
-### Backend Environment Variables
+Next restart will connect to the existing sandbox instead of creating a new one.
 
-Create `backend/.env`:
+### Template Resources
 
-**Option A: Azure CLI Authentication (Recommended)**
-```bash
-# E2B Configuration (required)
-E2B_API_KEY=your_e2b_api_key
-
-# Azure Storage Configuration
-AZURE_STORAGE_ENABLED=true
-AZURE_AUTH_MODE=cli  # Use Azure CLI credentials (az login)
-AZURE_STORAGE_ACCOUNT=your_storage_account
-# AZURE_STORAGE_KEY not needed with cli mode
-AZURE_STORAGE_CONTAINER=cloud-dev-workspace
-
-# Server Configuration (optional)
-PORT=3000
-FRONTEND_URL=http://localhost:5174
-SANDBOX_TIMEOUT=3600
+Configured in `backend/.e2b/e2b.toml`:
+```toml
+cpu_count = 4
+memory_mb = 4096
 ```
 
-**Option B: Key-Based Authentication (Azurite/Fallback)**
-```bash
-# E2B Configuration (required)
-E2B_API_KEY=your_e2b_api_key
-
-# Azure Storage Configuration
-AZURE_STORAGE_ENABLED=true
-AZURE_AUTH_MODE=key  # Use storage account key
-AZURE_STORAGE_ACCOUNT=devstorageaccount1
-AZURE_STORAGE_KEY=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==
-AZURE_STORAGE_CONTAINER=cloud-dev-workspace
-
-# Server Configuration (optional)
-PORT=3000
-FRONTEND_URL=http://localhost:5174
-SANDBOX_TIMEOUT=3600
-```
+Modify these values and rebuild the template to change sandbox resources.
 
 ## Troubleshooting
 
 ### "WebSocket connection failed"
-- Verify backend is running on correct port
-- Check CORS settings in backend
-- Verify VITE_API_URL matches backend address
+- Verify backend is running on port 3000
+- Check frontend CORS settings match
+- Ensure no firewall blocking WebSocket connections
 
 ### "E2B sandbox creation failed"
 - Check E2B_API_KEY is valid
-- Verify E2B account has available quota
-- Check E2B dashboard for error details
+- Verify E2B quota/credits
+- Review E2B dashboard for errors
 
-### "Azure Blob mount failed"
-- Verify Azure credentials are correct
-- Check blob container exists
-- For Azurite: Ensure Azurite is running
+### "R2 mount failed"
+- Verify R2 bucket exists (`cloud-dev-workspace`)
+- Check R2 credentials are correct
+- Ensure bucket permissions allow read/write
 
 ### "Files not persisting"
 - Verify working directory is `/workspace/files`
 - Check mount status: `df -h /workspace/files`
-- Verify blob container has write permissions
+- Test R2 access: List files in Cloudflare R2 dashboard
 
-See [TESTING-GUIDE.md](./TESTING-GUIDE.md) for detailed troubleshooting.
+### "Multiple sandboxes being created"
+- Set `E2B_SANDBOX_ID` in backend/.env to reuse sandboxes
+- This prevents creating new sandboxes on every connection
 
 ## Design Philosophy
 
@@ -291,8 +207,26 @@ Following ruthless simplicity and modular design principles:
 1. **Minimal abstractions**: Direct implementations without unnecessary layers
 2. **Clear module boundaries**: Self-contained components with explicit contracts
 3. **Graceful degradation**: System handles failures at every level
-4. **Development-friendly**: Easy local setup with Azurite emulator
-5. **Production-ready**: Seamless transition to real Azure Storage
+4. **S3-compatible storage**: Use R2's simple auth instead of fighting Azure policies
+5. **Sandbox reuse**: Avoid rate limits by connecting to existing sandboxes
+
+## Implementation Status
+
+All phases complete:
+- ✅ **Phase 1**: Frontend with xterm.js terminal
+- ✅ **Phase 2**: Backend with E2B sandbox integration
+- ✅ **Phase 3**: R2 + s3fs storage mounting
+- ✅ **Phase 4**: Sandbox reuse and performance optimization
+
+**What works:**
+- ✅ Browser-based terminal with full xterm.js features
+- ✅ WebSocket connection with auto-reconnect
+- ✅ E2B sandbox creation and reuse
+- ✅ PTY-based interactive terminal (no timeouts)
+- ✅ Cloudflare R2 storage mounting via s3fs
+- ✅ File persistence across sandbox restarts
+- ✅ Graceful cleanup on disconnect/timeout
+- ✅ High-performance sandboxes (4 vCPU, 4GB RAM)
 
 ## Contributing
 
@@ -300,17 +234,17 @@ See [backend/IMPLEMENTATION.md](./backend/IMPLEMENTATION.md) for detailed implem
 
 ## License
 
-MIT License - Part of the agent-sandbox cloud development environment project.
+MIT License
 
 ## Acknowledgments
 
 Built with:
-- [e2b.dev](https://e2b.dev) - Sandboxed code execution
+- [E2B](https://e2b.dev) - Sandboxed code execution platform
 - [xterm.js](https://xtermjs.org) - Terminal emulator
 - [Vite](https://vitejs.dev) - Build tool
 - [React](https://react.dev) - UI framework
-- [Azure Blob Storage](https://azure.microsoft.com/services/storage/blobs/) - Cloud storage
-- [blobfuse2](https://github.com/Azure/azure-storage-fuse) - FUSE driver
+- [Cloudflare R2](https://developers.cloudflare.com/r2/) - S3-compatible object storage
+- [s3fs](https://github.com/s3fs-fuse/s3fs-fuse) - FUSE driver for S3
 
 ---
 
